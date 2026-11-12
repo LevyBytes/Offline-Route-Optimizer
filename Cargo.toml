@@ -1,0 +1,22 @@
+[package]
+name = "offline_route_optimizer"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "Apache-2.0"
+description = "Orders a day's stops on real roads without a server, from an OpenStreetMap extract on the device."
+repository = "https://github.com/LevyBytes/Offline-Route-Optimizer"
+readme = "README.md"
+keywords = ["routing", "openstreetmap", "tsp", "offline", "dijkstra"]
+categories = ["algorithms", "science::geo"]
+publish = false
+
+[dependencies]
+# zlib inside OpenStreetMap's PBF files and gzip around its change files. MIT OR Zlib OR Apache-2.0.
+miniz_oxide = "=0.9.1"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
