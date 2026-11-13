@@ -37,7 +37,7 @@ pub type Progress<'a> = dyn FnMut(Step, u64, u64) + 'a;
 pub fn build(path: &Path, region: &str, progress: &mut Progress<'_>) -> Result<Graph> {
     let collected = collect::collect(path, progress)?;
     let mut joined = chains::join(&collected, progress);
-    joined.graph.bans = bans::bans(&collected, &joined);
+    joined.graph.bans = bans::bans(&collected, &joined)?;
     let header = &collected.header;
     joined.graph.meta = Meta {
         region: region.to_owned(),
@@ -48,7 +48,7 @@ pub fn build(path: &Path, region: &str, progress: &mut Progress<'_>) -> Result<G
     drop(collected);
     let mut graph = joined.graph;
     graph.roads = roads(&graph);
-    graph.grid = index::grid(&graph, progress);
+    graph.grid = index::grid(&graph, progress)?;
     Ok(graph)
 }
 
@@ -61,7 +61,10 @@ fn roads(graph: &Graph) -> Vec<u8> {
         } else {
             chain.backward
         };
-        let edge = &graph.edges[edge as usize];
+        // Every chain has an edge (chain.rs), but a chain without one is passed over rather than read past the end.
+        let Some(edge) = graph.edges.get(edge as usize) else {
+            continue;
+        };
         for node in [edge.tail, edge.head] {
             roads[node as usize] = roads[node as usize].saturating_add(1);
         }

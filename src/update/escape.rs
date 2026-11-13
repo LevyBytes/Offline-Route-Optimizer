@@ -1,5 +1,5 @@
 //! XML's references in attribute values: the five named entities and numeric character references
-//! (https://www.w3.org/TR/xml/, section 4.1).
+//! (<https://www.w3.org/TR/xml/>, section 4.1).
 
 use crate::{Error, Result};
 

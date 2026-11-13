@@ -39,6 +39,16 @@ impl Map {
     }
 }
 
+/// How many part files a save or merge left beside `path`.
+pub fn parts(path: &Path) -> usize {
+    let name = path.file_name().unwrap().to_string_lossy().into_owned();
+    let entries = std::fs::read_dir(path.parent().unwrap()).unwrap();
+    let names = entries.map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned());
+    names
+        .filter(|left| left.starts_with(&format!("{name}.")) && left.ends_with(".part"))
+        .count()
+}
+
 /// A file path in Cargo's folder for test files, made fresh for each test.
 pub fn temp(name: &str) -> PathBuf {
     let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("offline_route_optimizer");

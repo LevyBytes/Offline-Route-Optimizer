@@ -47,7 +47,7 @@ pub(super) fn positions(
     for index in 0..dense.ids.len() {
         found(
             dense.ids[index],
-            block.point(dense.lats[index], dense.lons[index]),
+            block.point(dense.lats[index], dense.lons[index])?,
         );
     }
     Ok(())
@@ -69,7 +69,7 @@ pub(super) fn nodes(block: &Block, data: &[u8], out: &mut Vec<Element>) -> Resul
                 .ok_or(Error::Format("dense tag without a value"))?;
             tags.push((block.string(key)?, block.string(value)?));
         }
-        let at = block.point(dense.lats[index], dense.lons[index]);
+        let at = block.point(dense.lats[index], dense.lons[index])?;
         out.push(Element::Node(Node {
             id: dense.ids[index],
             at,

@@ -51,7 +51,7 @@ pub struct Meta {
 pub struct Graph {
     pub meta: Meta,
     pub nodes: Vec<Point>,
-    /// Each node's edges leaving it: edges[first_edge[n]..first_edge[n + 1]].
+    /// Each node's edges leaving it: `edges[first_edge[n]..first_edge[n + 1]]`.
     pub first_edge: Vec<u32>,
     pub edges: Vec<Edge>,
     pub chains: Vec<Chain>,

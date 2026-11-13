@@ -1,11 +1,18 @@
 //! Gzip (RFC 1952) as Geofabrik writes its change files: one member, deflate inside, checked by its CRC-32 and size.
 
+use miniz_oxide::inflate::{TINFLStatus, decompress_to_vec_with_limit};
+
 use crate::{Error, Result};
 
-/// The largest change file this library inflates (a day of California is a few tens of megabytes).
-pub const LIMIT: usize = 512 * 1024 * 1024;
+/// The largest change file `gunzip` inflates (a day of Nevada inflates to under a megabyte).
+pub const LIMIT: usize = 128 << 20;
 
 pub fn gunzip(data: &[u8]) -> Result<Vec<u8>> {
+    gunzip_within(data, LIMIT)
+}
+
+/// As `gunzip`, refusing a file that inflates past `most` bytes.
+pub fn gunzip_within(data: &[u8], most: usize) -> Result<Vec<u8>> {
     let bad = |what| Error::Format(what);
     if data.len() < 18 || data[..3] != [0x1f, 0x8b, 8] {
         return Err(bad("not a gzip file"));
@@ -28,8 +35,10 @@ pub fn gunzip(data: &[u8]) -> Result<Vec<u8>> {
         at += 2;
     }
     let body = data.get(at..data.len() - 8).ok_or(bad("gzip body"))?;
-    let out = miniz_oxide::inflate::decompress_to_vec_with_limit(body, LIMIT)
-        .map_err(|_| bad("deflate data"))?;
+    let out = decompress_to_vec_with_limit(body, most).map_err(|error| match error.status {
+        TINFLStatus::HasMoreOutput => Error::Limit("change files inflating past the limit"),
+        _ => bad("deflate data"),
+    })?;
     let trailer = &data[data.len() - 8..];
     let crc = u32::from_le_bytes([trailer[0], trailer[1], trailer[2], trailer[3]]);
     let size = u32::from_le_bytes([trailer[4], trailer[5], trailer[6], trailer[7]]);

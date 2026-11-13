@@ -17,7 +17,8 @@ pub fn chain(
     way: &RoadWay,
     shape: &[(usize, Point)],
 ) {
-    if shape.len() < 2 {
+    // A chain needs two points and a direction a car may drive (so every chain has an edge).
+    if shape.len() < 2 || (way.road.forward <= 0.0 && way.road.backward <= 0.0) {
         return;
     }
     let mut node = |i: usize, at: Point| {

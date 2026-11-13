@@ -4,7 +4,12 @@
 use super::numbers::zigzag;
 use super::out::Out;
 use super::wire::{Value, Wire};
-use crate::Result;
+use crate::{Error, Result};
+
+/// The features this reader has (a file that requires another, history for one, is refused, as the format asks) and
+/// the most feature names a header may list (an honest one lists a handful).
+const HAS: [&str; 2] = ["OsmSchema-V0.6", "DenseNodes"];
+const MOST_FEATURES: usize = 64;
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Header {
@@ -17,7 +22,7 @@ pub struct Header {
     /// Seconds since 1970 (UTC) of the data's last change.
     pub replication_time: Option<i64>,
     pub replication_sequence: Option<i64>,
-    /// Where the file's change files are (e.g. https://download.geofabrik.de/north-america/us/nevada-updates).
+    /// Where the file's change files are (e.g. <https://download.geofabrik.de/north-america/us/nevada-updates>).
     pub replication_url: Option<String>,
 }
 
@@ -40,6 +45,13 @@ pub fn decode(data: &[u8]) -> Result<Header> {
             (34, Value::Bytes(url)) => header.replication_url = Some(text(url)),
             _ => {}
         }
+        if header.required.len() + header.optional.len() > MOST_FEATURES {
+            return Err(Error::Limit("a header naming more than 64 features"));
+        }
+    }
+    let has = |name: &String| HAS.contains(&name.as_str());
+    if !header.required.iter().all(has) {
+        return Err(Error::Format("requires a feature this reader lacks"));
     }
     Ok(header)
 }
@@ -64,19 +76,12 @@ pub fn encode(header: &Header) -> Vec<u8> {
         }
         out.bytes(1, &inner.bytes);
     }
-    header
-        .required
-        .iter()
-        .for_each(|name| out.bytes(4, name.as_bytes()));
-    header
-        .optional
-        .iter()
-        .for_each(|name| out.bytes(5, name.as_bytes()));
-    if !header.program.is_empty() {
-        out.bytes(16, header.program.as_bytes());
-    }
-    if !header.source.is_empty() {
-        out.bytes(17, header.source.as_bytes());
+    let names = header.required.iter().map(|name| (4, name));
+    let names = names.chain(header.optional.iter().map(|name| (5, name)));
+    for (number, text) in names.chain([(16, &header.program), (17, &header.source)]) {
+        if !text.is_empty() || number < 16 {
+            out.bytes(number, text.as_bytes());
+        }
     }
     if let Some(time) = header.replication_time {
         out.int(32, time as u64);

@@ -9,9 +9,13 @@ mod costs;
 mod entry;
 mod expand;
 mod search;
+mod turns;
 
 use crate::graph::Graph;
 use crate::snap::Spot;
+use crate::{Error, Result};
+
+pub use turns::{U_TURN_SECONDS, turn_seconds};
 
 /// What the search keeps least: the drive's time, or its length.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -35,8 +39,18 @@ pub const LIMIT_METERS: f64 = 600_000.0;
 /// system for its core count reads cgroup files Android's SELinux policy denies an app.
 pub const THREADS: usize = 4;
 
+/// The most spots one table takes: a search from each and a leg for each pair, so 1,000 spots take 24 MB of legs.
+pub const MOST_SPOTS: usize = 1_000;
+
 /// The leg from each spot to each other (None where no road joins them within the limit; a spot to itself is 0).
-pub fn table(graph: &Graph, spots: &[Spot], goal: Goal) -> Vec<Vec<Option<Leg>>> {
+/// Refused: more than MOST_SPOTS spots, and a spot `snap` did not make on this graph.
+pub fn table(graph: &Graph, spots: &[Spot], goal: Goal) -> Result<Vec<Vec<Option<Leg>>>> {
+    if spots.len() > MOST_SPOTS {
+        return Err(Error::Limit("a table of more than 1,000 spots"));
+    }
+    if !spots.iter().all(|spot| fits(graph, spot)) {
+        return Err(Error::Input("a spot from another graph"));
+    }
     let threads = THREADS.min(spots.len()).max(1);
     let mut rows = vec![Vec::new(); spots.len()];
     std::thread::scope(|scope| {
@@ -52,25 +66,24 @@ pub fn table(graph: &Graph, spots: &[Spot], goal: Goal) -> Vec<Vec<Option<Leg>>>
             })
             .collect();
         for handle in handles {
-            for (from, row) in handle.join().expect("a search thread ends") {
+            let found = handle
+                .join()
+                .map_err(|_| Error::Input("a graph the search cannot use"))?;
+            for (from, row) in found {
                 rows[from] = row;
             }
         }
-    });
-    rows
+        Ok(rows)
+    })
 }
 
-/// OSRM's turn duration in seconds for a turn of `angle` degrees (positive to the right), driving on the right.
-pub fn turn_seconds(angle: f64) -> f64 {
-    const PENALTY: f64 = 7.5;
-    const BIAS: f64 = 1.075;
-    let x = if angle >= 0.0 {
-        (13.0 / BIAS) * angle / 180.0 - 6.5 * BIAS
-    } else {
-        (13.0 * BIAS) * -angle / 180.0 - 6.5 / BIAS
+/// Whether a spot was made on this graph: its chain is there with the shape it remembers, its share 0 to 1.
+fn fits(graph: &Graph, spot: &Spot) -> bool {
+    let Some(chain) = graph.chains.get(spot.chain as usize) else {
+        return false;
     };
-    PENALTY / (1.0 + (-x).exp())
+    let shape = graph.points.get(chain.first as usize..);
+    let shape = shape.and_then(|rest| rest.get(..chain.count as usize));
+    let origin = shape.and_then(|shape| Some((*shape.first()?, shape.len() as u32)));
+    (0.0..=1.0).contains(&spot.share) && origin == Some(spot.origin)
 }
-
-/// The extra time a U-turn takes on top of its turn.
-pub const U_TURN_SECONDS: f64 = 20.0;

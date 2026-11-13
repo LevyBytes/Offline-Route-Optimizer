@@ -29,13 +29,21 @@ fn chain_ok(g: &Graph, index: usize, c: &Chain) -> bool {
     shape && c.count >= 2 && named && driven && mine(c.forward, true) && mine(c.backward, false)
 }
 
+/// Whether every index in a graph points inside its list and every place lies on the earth. A graph read from a file
+/// is checked so; a program that builds or changes a graph itself can check it the same way before using it.
 pub fn check(g: &Graph) -> Result<()> {
     let bad = |what| Err(Error::Format(what));
+    let count =
+        |list: usize| u32::try_from(list).map_err(|_| Error::Format("graph past its indexes"));
     let (nodes, edges, chains) = (
-        g.nodes.len() as u32,
-        g.edges.len() as u32,
-        g.chains.len() as u32,
+        count(g.nodes.len())?,
+        count(g.edges.len())?,
+        count(g.chains.len())?,
     );
+    count(g.points.len())?;
+    if !g.nodes.iter().chain(&g.points).all(|place| place.valid()) {
+        return bad("graph file places");
+    }
     if !ranges(&g.first_edge, g.nodes.len(), g.edges.len()) || g.roads.len() != g.nodes.len() {
         return bad("graph file nodes");
     }

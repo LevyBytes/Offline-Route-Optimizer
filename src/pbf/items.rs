@@ -1,9 +1,10 @@
 //! A block's single nodes, ways and relations: tags as two lists of string indexes, references and member ids as
-//! differences from the one before.
+//! differences from the one before. A way or relation past OpenStreetMap's own limits is left out (None).
 
 use super::block::Block;
 use super::numbers::{deltas, packed, zigzag};
 use super::wire::{Value, Wire};
+use crate::limits::{MOST_MEMBERS, MOST_REFS};
 use crate::osm::{Kind, Member, Node, Relation, Tags, Way};
 use crate::{Error, Result};
 
@@ -32,12 +33,12 @@ pub(super) fn node(block: &Block, data: &[u8]) -> Result<Node> {
     }
     Ok(Node {
         id,
-        at: block.point(lat, lon),
+        at: block.point(lat, lon)?,
         tags: tags(block, &keys, &vals)?,
     })
 }
 
-pub(super) fn way(block: &Block, data: &[u8]) -> Result<Way> {
+pub(super) fn way(block: &Block, data: &[u8]) -> Result<Option<Way>> {
     let (mut id, mut keys, mut vals, mut refs) = (0, Vec::new(), Vec::new(), Vec::new());
     let mut wire = Wire::new(data);
     while let Some((number, value)) = wire.field()? {
@@ -49,14 +50,14 @@ pub(super) fn way(block: &Block, data: &[u8]) -> Result<Way> {
             _ => {}
         }
     }
-    Ok(Way {
-        id,
-        refs,
-        tags: tags(block, &keys, &vals)?,
-    })
+    if refs.len() > MOST_REFS {
+        return Ok(None);
+    }
+    let tags = tags(block, &keys, &vals)?;
+    Ok(Some(Way { id, refs, tags }))
 }
 
-pub(super) fn relation(block: &Block, data: &[u8]) -> Result<Relation> {
+pub(super) fn relation(block: &Block, data: &[u8]) -> Result<Option<Relation>> {
     let (mut id, mut keys, mut vals) = (0, Vec::new(), Vec::new());
     let (mut roles, mut ids, mut types) = (Vec::new(), Vec::new(), Vec::new());
     let mut wire = Wire::new(data);
@@ -74,6 +75,9 @@ pub(super) fn relation(block: &Block, data: &[u8]) -> Result<Relation> {
     if roles.len() != ids.len() || types.len() != ids.len() {
         return Err(Error::Format("relation member lists differ in length"));
     }
+    if ids.len() > MOST_MEMBERS {
+        return Ok(None);
+    }
     let members = (0..ids.len()).map(|index| {
         let kind = match types[index] {
             0 => Kind::Node,
@@ -87,9 +91,7 @@ pub(super) fn relation(block: &Block, data: &[u8]) -> Result<Relation> {
             role: block.string(roles[index])?,
         })
     });
-    Ok(Relation {
-        id,
-        members: members.collect::<Result<_>>()?,
-        tags: tags(block, &keys, &vals)?,
-    })
+    let members = members.collect::<Result<_>>()?;
+    let tags = tags(block, &keys, &vals)?;
+    Ok(Some(Relation { id, members, tags }))
 }

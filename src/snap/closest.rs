@@ -13,12 +13,14 @@ pub(super) fn closest(graph: &Graph, chain: u32, at: Point) -> Spot {
         .map(|pair| geo::meters(pair[0], pair[1]))
         .collect();
     let total: f64 = lengths.iter().sum();
+    let origin = (shape[0], shape.len() as u32);
     let (mut best, mut before) = (
         Spot {
             chain,
             share: 0.0,
             at: shape[0],
             off: f64::INFINITY,
+            origin,
         },
         0.0,
     );
@@ -35,6 +37,7 @@ pub(super) fn closest(graph: &Graph, chain: u32, at: Point) -> Spot {
                 share,
                 at: geo::between(pair[0], pair[1], t),
                 off,
+                origin,
             };
         }
         before += lengths[k];

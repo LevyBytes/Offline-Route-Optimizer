@@ -1,5 +1,5 @@
 //! Protocol Buffers' wire format, the part PBF files use: varints, zigzag numbers, fixed widths, length-delimited
-//! fields and packed repeated numbers (https://protobuf.dev/programming-guides/encoding/).
+//! fields and packed repeated numbers (<https://protobuf.dev/programming-guides/encoding/>).
 
 use crate::{Error, Result};
 
@@ -30,6 +30,10 @@ impl<'a> Wire<'a> {
                 .get(self.at)
                 .ok_or(Error::Format("varint past the end"))?;
             self.at += 1;
+            // The tenth byte holds only the 64th bit.
+            if shift == 63 && byte > 1 {
+                return Err(Error::Format("varint beyond 64 bits"));
+            }
             value |= u64::from(byte & 0x7f) << shift;
             if byte < 0x80 {
                 return Ok(value);

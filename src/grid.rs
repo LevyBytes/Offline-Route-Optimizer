@@ -1,6 +1,6 @@
 //! The grid snapping searches: the map cut into square cells of degrees, each listing the chains with a piece in it.
 
-/// The chains in each cell of `cell` ten-millionths of a degree: pieces[starts[k]..starts[k + 1]] for keys[k].
+/// The chains in each cell of `cell` ten-millionths of a degree: `pieces[starts[k]..starts[k + 1]]` for `keys[k]`.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Grid {
     pub cell: i32,

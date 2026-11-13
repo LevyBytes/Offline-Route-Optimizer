@@ -1,16 +1,25 @@
 //! Turn restrictions as forbidden pairs of edges at their via junction. "no_..." forbids each edge of the from road
 //! arriving there followed by each edge of the to road leaving; "only_..." forbids every other edge leaving. A
-//! restriction from a road back onto itself (no_u_turn) forbids only turning back along the same chain. One whose
-//! roads or junction the graph lacks (a road cars may not use, a point outside the extract) is left out.
+//! restriction from a road back onto itself (no_u_turn) forbids only turning back along the same chain. A restriction
+//! given twice counts once; one whose roads or junction the graph lacks (a road cars may not use, a point outside the
+//! extract) is left out, and so is one that would forbid more than 4,096 turns (an honest one forbids a few, a road
+//! made to pass one junction again and again millions). A map whose bans pass four an edge and 2^20 more is refused.
 
 use super::chains::Joined;
 use super::collect::Collected;
 use crate::graph::{Graph, NONE};
+use crate::{Error, Result};
 
-pub fn bans(c: &Collected, j: &Joined) -> Vec<(u32, u32)> {
+const MOST_TURNS: usize = 4_096;
+
+pub fn bans(c: &Collected, j: &Joined) -> Result<Vec<(u32, u32)>> {
     let graph = &j.graph;
+    let most = graph.edges.len().saturating_mul(4).saturating_add(1 << 20);
+    let mut restrictions = c.restrictions.clone();
+    restrictions.sort_unstable();
+    restrictions.dedup();
     let mut bans = Vec::new();
-    for r in &c.restrictions {
+    for r in &restrictions {
         let Ok(point) = c.ids.binary_search(&r.via) else {
             continue;
         };
@@ -21,17 +30,22 @@ pub fn bans(c: &Collected, j: &Joined) -> Vec<(u32, u32)> {
         let arriving: Vec<u32> = edges(graph, j, r.from)
             .filter(|e| graph.edges[*e as usize].head == via)
             .collect();
-        let leaving: Vec<u32> = edges(graph, j, r.to)
+        let mut leaving: Vec<u32> = edges(graph, j, r.to)
             .filter(|e| graph.edges[*e as usize].tail == via)
             .collect();
-        if arriving.is_empty() || leaving.is_empty() {
+        let turns = arriving.len().saturating_mul(graph.out(via).len());
+        if arriving.is_empty() || leaving.is_empty() || turns > MOST_TURNS {
             continue;
         }
+        if bans.len() + turns > most {
+            return Err(Error::Limit("turn bans past four an edge"));
+        }
+        leaving.sort_unstable();
         for &a in &arriving {
             let chain = graph.edges[a as usize].chain;
             for out in graph.out(via) {
                 let out = out as u32;
-                let to_road = leaving.contains(&out);
+                let to_road = leaving.binary_search(&out).is_ok();
                 let back = graph.edges[out as usize].chain == chain && out != a;
                 let banned = match (r.only, r.from == r.to) {
                     (false, true) => back,
@@ -46,7 +60,7 @@ pub fn bans(c: &Collected, j: &Joined) -> Vec<(u32, u32)> {
     }
     bans.sort_unstable();
     bans.dedup();
-    bans
+    Ok(bans)
 }
 
 /// The edges of a road's chains, both ways.

@@ -14,4 +14,10 @@ impl Kinds {
         ways: true,
         relations: true,
     };
+    /// Ways and relations without nodes: a build's first read.
+    pub const LINES: Kinds = Kinds {
+        nodes: false,
+        ways: true,
+        relations: true,
+    };
 }

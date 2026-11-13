@@ -25,7 +25,7 @@ fn every_leg_matches_the_reference() {
             })
             .collect();
         for goal in [Goal::Time, Goal::Distance] {
-            let fast = route::table(&g, &spots, goal);
+            let fast = route::table(&g, &spots, goal).unwrap();
             let slow = reference::table(&g, &spots, goal);
             for (i, row) in fast.iter().enumerate() {
                 for (j, leg) in row.iter().enumerate() {
@@ -61,7 +61,7 @@ fn right_turns_cost_less_than_left_and_one_way_streets_hold() {
     let g = graph(&map, "oneway.osm.pbf");
     let west = snap::snap(&g, Point::degrees(36.1, -115.1995), None).unwrap();
     let east = snap::snap(&g, Point::degrees(36.1, -115.1985), None).unwrap();
-    let legs = route::table(&g, &[west, east], Goal::Distance);
+    let legs = route::table(&g, &[west, east], Goal::Distance).unwrap();
     let (with, against) = (legs[0][1].unwrap().meters, legs[1][0].unwrap().meters);
     assert!((with - 90.0).abs() < 1.0, "{with}");
     assert!(
@@ -79,6 +79,6 @@ fn a_dead_end_turns_back() {
     let g = graph(&map, "dead-end.osm.pbf");
     let near = snap::snap(&g, Point::degrees(36.1, -115.1998), None).unwrap();
     let far = snap::snap(&g, Point::degrees(36.1, -115.1992), None).unwrap();
-    let legs = route::table(&g, &[near, far], Goal::Time);
+    let legs = route::table(&g, &[near, far], Goal::Time).unwrap();
     assert!((legs[0][1].unwrap().meters - 54.0).abs() < 1.0);
 }

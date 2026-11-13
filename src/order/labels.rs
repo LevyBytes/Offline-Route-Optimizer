@@ -1,95 +1,75 @@
 //! The labels' search itself: every set of stops in order of its bits, each stop reached last, each label kept there,
 //! carried on to each stop the rules allow next; a label beaten on lateness, cost and free time by another at the same
-//! state is dropped. The best label at the full set is followed back to the order.
+//! state is dropped and takes no more room. The best label at the full set is followed back to the order (back.rs).
 
+use super::back::back;
+use super::label::{Label, check, step};
 use super::{Costs, Day, MAX_STOPS};
 use crate::{Error, Result};
 
-#[derive(Clone, Copy)]
-struct Label {
-    late: f64,
-    cost: f64,
-    free: f64,
-    last: usize,
-    parent: u32,
-}
-
-const ROOT: u32 = u32::MAX;
-
-fn beats(a: &Label, b: &Label) -> bool {
-    a.late <= b.late && a.cost <= b.cost && a.free <= b.free
-}
+/// The most labels a search keeps at once by default (24 bytes each, so 192 MiB): a day of 16 stops at random times
+/// keeps about five million, and a day made to defeat the comparisons could keep billions.
+pub const MAX_LABELS: usize = 1 << 23;
 
 /// The best order of `count` stops (indexes into the costs), or None if the rules allow none.
 pub fn best(day: &impl Day, count: usize, costs: &Costs<'_>) -> Result<Option<Vec<usize>>> {
+    best_within(day, count, costs, MAX_LABELS)
+}
+
+/// As `best`, keeping at most `most` labels at once (`Error::Limit` past them).
+pub fn best_within(
+    day: &impl Day,
+    count: usize,
+    costs: &Costs<'_>,
+    most: usize,
+) -> Result<Option<Vec<usize>>> {
     if count > MAX_STOPS {
         return Err(Error::TooMany(count));
     }
+    check(costs, count)?;
     let (n, size) = (count, 1usize << count);
-    let (mut arena, mut lists): (Vec<Label>, Vec<Vec<u32>>) =
-        (Vec::new(), vec![Vec::new(); size * n]);
+    let (mut lists, mut live): (Vec<Vec<Label>>, usize) = (vec![Vec::new(); size * n], 0);
     for j in (0..n).filter(|j| day.allowed(0, *j)) {
         let visit = day.visit(0, j, None, 0.0);
-        lists[(1 << j) * n + j].push(arena.len() as u32);
-        arena.push(Label {
-            late: visit.late,
-            cost: costs.from[j],
-            free: visit.free,
-            last: j,
-            parent: ROOT,
-        });
+        lists[(1 << j) * n + j].push(Label::new(visit.late, costs.from[j], visit)?);
+        live += 1;
     }
     for mask in 1..size {
         for last in 0..n {
-            let here = std::mem::take(&mut lists[mask * n + last]);
+            let mut here = std::mem::take(&mut lists[mask * n + last]);
             for j in (0..n).filter(|j| mask & (1 << j) == 0 && day.allowed(mask as u32, *j)) {
-                let key = (mask | (1 << j)) * n + j;
-                for &index in &here {
-                    let from = arena[index as usize];
-                    let visit = day.visit(mask as u32, j, Some(from.free), costs.minutes[last][j]);
-                    let (late, cost) = (from.late + visit.late, from.cost + costs.between[last][j]);
-                    let label = Label {
-                        late,
-                        cost,
-                        free: visit.free,
-                        last: j,
-                        parent: index,
-                    };
-                    let list = &mut lists[key];
-                    if list
-                        .iter()
-                        .any(|other| beats(&arena[*other as usize], &label))
-                    {
+                let list = &mut lists[(mask | (1 << j)) * n + j];
+                for from in &here {
+                    let label = step(day, costs, (mask, last), from, j)?;
+                    if list.iter().any(|other| other.beats(&label)) {
                         continue;
                     }
-                    list.retain(|other| !beats(&label, &arena[*other as usize]));
-                    list.push(arena.len() as u32);
-                    arena.push(label);
+                    let before = list.len();
+                    list.retain(|other| !label.beats(other));
+                    live = live + 1 - (before - list.len());
+                    if live > most {
+                        return Err(Error::Limit("an order keeping more labels than allowed"));
+                    }
+                    list.push(label);
                 }
             }
+            here.shrink_to_fit();
             lists[mask * n + last] = here;
         }
     }
-    let mut best: Option<(u32, f64, f64)> = None;
+    let mut best: Option<(usize, Label, f64)> = None;
     for last in 0..n {
-        for &index in &lists[(size - 1) * n + last] {
-            let label = arena[index as usize];
+        for label in &lists[(size - 1) * n + last] {
             let total = label.cost + costs.to[last];
-            if best.is_none_or(|(_, late, cost)| {
-                label.late < late || label.late == late && total < cost
+            if best.is_none_or(|(_, b, cost)| {
+                label.late < b.late || label.late == b.late && total < cost
             }) {
-                best = Some((index, label.late, total));
+                best = Some((last, *label, total));
             }
         }
     }
-    let Some((mut index, _, _)) = best else {
+    let Some((last, label, _)) = best else {
         return Ok((n == 0).then(Vec::new));
     };
-    let mut order = Vec::with_capacity(n);
-    while index != ROOT {
-        order.push(arena[index as usize].last);
-        index = arena[index as usize].parent;
-    }
-    order.reverse();
-    Ok(Some(order))
+    back(day, costs, (&lists, n), (size - 1, last), label).map(Some)
 }

@@ -7,11 +7,14 @@
 //! the same day always gives the same answer. What a stop's times are, and which stops may come where, is the
 //! caller's rule (`Day`).
 
+mod back;
+mod label;
 mod labels;
 
-pub use labels::best;
+pub use labels::{MAX_LABELS, best, best_within};
 
-/// The most stops an exact order takes (2^16 sets of 16 stops).
+/// The most stops an exact order takes (2^16 sets of 16 stops). It bounds the work, not the memory: the labels kept
+/// depend on the day's times, so a search keeps at most MAX_LABELS of them and refuses a day that needs more.
 pub const MAX_STOPS: usize = 16;
 
 /// A stop's outcome: how late it is and when the person is free again.
@@ -21,7 +24,8 @@ pub struct Visit {
     pub free: f64,
 }
 
-/// The day's rules. `before` is the set of stops already visited (bit i for stop i).
+/// The day's rules. `before` is the set of stops already visited (bit i for stop i). The same question must always
+/// get the same answer, as the order is followed back by asking again; a visit's numbers must be finite.
 pub trait Day {
     /// Whether the stop may come next.
     fn allowed(&self, before: u32, stop: usize) -> bool;
@@ -30,7 +34,8 @@ pub trait Day {
     fn visit(&self, before: u32, stop: usize, free: Option<f64>, drive: f64) -> Visit;
 }
 
-/// What the order minimizes (`from`, `to` and `between`) and the drive minutes the day's times use.
+/// What the order minimizes (`from`, `to` and `between`) and the drive minutes the day's times use: a finite number
+/// for each stop (a drive no road gives is the caller's to price, as a large cost rather than infinity).
 pub struct Costs<'a> {
     pub from: &'a [f64],
     pub to: &'a [f64],

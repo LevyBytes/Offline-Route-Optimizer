@@ -1,1 +1,8 @@
+# Keep this repo clean: build output and OS/editor clutter.
 /target
+
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/

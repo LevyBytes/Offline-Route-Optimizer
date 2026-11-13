@@ -1,6 +1,7 @@
 //! What the tests share: a made-up town written as a real PBF file (a grid of streets around Las Vegas's latitude,
 //! with whatever one-way streets, closed roads and turn restrictions a test adds), the slow reference search, a day
-//! of time windows for the order tests, a gzip writer, a day's change file and five real places.
+//! of time windows for the order tests, a gzip writer, a day's change file and five real places; for the limits
+//! tests, a hand-made wire format and a refusal's kind.
 
 #![allow(dead_code)]
 
@@ -10,8 +11,10 @@ pub mod gzip;
 pub mod places;
 pub mod random;
 pub mod reference;
+pub mod refused;
 pub mod town;
 pub mod windows;
+pub mod wire;
 
 pub use file::temp;
 

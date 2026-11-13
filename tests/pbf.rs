@@ -1,10 +1,12 @@
-//! The PBF writer and reader agree: every element, tag, reference, member and header field written comes back.
+//! The PBF writer and reader agree: every element, tag, reference, member and header field written comes back, in
+//! blocks the reader takes however large the elements.
 
 mod common;
 
+use common::refused::limit;
 use common::{Map, tags, temp};
-use offline_route_optimizer::osm::{Element, Node, Point};
-use offline_route_optimizer::pbf;
+use offline_route_optimizer::osm::{Element, Node, Point, Way};
+use offline_route_optimizer::pbf::{self, Header, Writer};
 
 #[test]
 fn elements_come_back_as_written() {
@@ -52,4 +54,19 @@ fn many_blocks_keep_their_order() {
         panic!("a node")
     };
     assert_eq!(last.at, Point::degrees(36.02, -115.0));
+}
+
+#[test]
+fn large_elements_still_make_readable_blocks() {
+    // Two thousand ways whose 2,000 points jump by 2^60 take nine bytes a point: about 36 MB, past the 32 MiB a
+    // reader takes if written as one block, as 8,000 elements a block once were.
+    let mut map = Map::default();
+    let refs: Vec<i64> = (0..2_000).map(|k| (k % 2) << 60).collect();
+    (0..2_000).for_each(|id| map.way(id, &refs, &[]));
+    let path = temp("large.osm.pbf");
+    map.write(&path);
+    assert_eq!(pbf::elements(&path).unwrap().1.len(), 2_000);
+    let mut writer = Writer::new(Vec::new(), &Header::default()).unwrap();
+    let (refs, tags) = (vec![0; 1_700_000], Vec::new());
+    assert!(limit(writer.add(Element::Way(Way { id: 1, refs, tags }))));
 }

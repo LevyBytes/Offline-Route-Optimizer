@@ -1,6 +1,7 @@
-//! The parts of an osmChange file's tags: an attribute by name, a number, a coordinate read exactly, a member's kind
-//! and an element as its opening tag gives it.
+//! The parts of an osmChange file's tags: an attribute by name, a text within OpenStreetMap's length, a number, a
+//! coordinate read exactly, a member's kind and an element as its opening tag gives it.
 
+use crate::limits::MOST_TEXT;
 use crate::osm::{Element, Kind, Node, Point, Relation, Way};
 use crate::{Error, Result};
 
@@ -12,6 +13,14 @@ pub(super) fn get<'a>(attributes: &'a [(&str, String)], key: &str) -> Result<&'a
         .find(|(k, _)| *k == key)
         .map(|(_, value)| value.as_str())
         .ok_or(BAD)
+}
+
+/// A key, value or role, refused past OpenStreetMap's length (as the PBF reader would refuse the merged extract).
+pub(super) fn text(value: &str) -> Result<String> {
+    match value.len() <= MOST_TEXT {
+        true => Ok(value.to_owned()),
+        false => Err(Error::Limit("a text longer than OpenStreetMap allows")),
+    }
 }
 
 pub(super) fn number(attributes: &[(&str, String)], key: &str) -> Result<i64> {
@@ -30,7 +39,10 @@ pub fn e7(text: &str) -> Result<i32> {
     }
     let whole: i64 = whole.parse().map_err(|_| BAD)?;
     let fraction: i64 = format!("{fraction:0<7}").parse().map_err(|_| BAD)?;
-    let value = whole * 10_000_000 + fraction;
+    let value = whole
+        .checked_mul(10_000_000)
+        .and_then(|whole| whole.checked_add(fraction));
+    let value = value.ok_or(BAD)?;
     i32::try_from(if negative { -value } else { value }).map_err(|_| BAD)
 }
 

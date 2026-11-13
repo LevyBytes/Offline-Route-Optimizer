@@ -69,7 +69,7 @@ fn a_real_extract() {
         .collect();
     for goal in [Goal::Time, Goal::Distance] {
         let timed = Instant::now();
-        let table = route::table(&graph, &spots, goal);
+        let table = route::table(&graph, &spots, goal).unwrap();
         println!(
             "          {goal:?} table in {:.3} s",
             timed.elapsed().as_secs_f64()

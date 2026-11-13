@@ -1,5 +1,5 @@
 //! A PBF file is a run of blobs: a four-byte big-endian length, a BlobHeader naming the blob's kind, and a Blob
-//! holding one block, zlib-compressed or raw (https://wiki.openstreetmap.org/wiki/PBF_Format).
+//! holding one block, zlib-compressed or raw (<https://wiki.openstreetmap.org/wiki/PBF_Format>).
 
 use std::io::{Read, Seek, SeekFrom};
 

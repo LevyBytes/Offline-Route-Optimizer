@@ -4,7 +4,7 @@
 
 use crate::osm::{Kind, Relation, tag};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Restriction {
     pub from: i64,
     pub via: i64,

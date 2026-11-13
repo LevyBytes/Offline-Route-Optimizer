@@ -35,8 +35,8 @@ pub fn project(p: Point, a: Point, b: Point) -> (f64, f64) {
     let metres = RADIUS.to_radians() / 1e7;
     let xy = |q: Point| {
         (
-            f64::from(q.lon - p.lon) * scale * metres,
-            f64::from(q.lat - p.lat) * metres,
+            (f64::from(q.lon) - f64::from(p.lon)) * scale * metres,
+            (f64::from(q.lat) - f64::from(p.lat)) * metres,
         )
     };
     let ((ax, ay), (bx, by)) = (xy(a), xy(b));

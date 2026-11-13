@@ -24,6 +24,11 @@ impl Point {
     pub fn lon_degrees(self) -> f64 {
         f64::from(self.lon) / 1e7
     }
+
+    /// Whether the point lies on the earth: its latitude within 90 degrees and its longitude within 180.
+    pub fn valid(self) -> bool {
+        self.lat.unsigned_abs() <= 900_000_000 && self.lon.unsigned_abs() <= 1_800_000_000
+    }
 }
 
 /// Key and value pairs, in their file order.

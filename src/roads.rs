@@ -6,7 +6,7 @@
 
 use crate::osm::tag;
 
-/// A drivable way: its class (0 motorway to 13 service), its speed each way in km/h (0: not that way).
+/// A drivable way: its class (0 motorway to 13 service), its speed each way in km/h (0: not that way; one is not).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Road {
     pub class: u8,
@@ -80,21 +80,19 @@ pub fn road(tags: &[(String, String)]) -> Option<Road> {
     })
 }
 
-/// A posted limit in km/h: "50", "50 km/h", "45 mph"; none for "none", "signals", "walk" and the like.
+/// A posted limit in km/h, from 5 to 200: "50", "50 km/h", "45 mph"; none for "none", "signals", "walk" and the like.
 pub fn maxspeed(value: &str) -> Option<f64> {
     let value = value.trim();
     let digits = value
         .find(|c: char| !c.is_ascii_digit() && c != '.')
         .unwrap_or(value.len());
-    let number: f64 = value[..digits]
-        .parse()
-        .ok()
-        .filter(|speed: &f64| *speed > 0.0)?;
-    let unit = value[digits..].trim().to_ascii_lowercase();
-    match unit.as_str() {
-        "" | "km/h" | "kmh" | "kph" => Some(number),
-        "mph" => Some(number * 1.609_344),
-        "knots" => Some(number * 1.852),
-        _ => None,
-    }
+    let number: f64 = value[..digits].parse().ok()?;
+    let speed = match value[digits..].trim().to_ascii_lowercase().as_str() {
+        "" | "km/h" | "kmh" | "kph" => number,
+        "mph" => number * 1.609_344,
+        "knots" => number * 1.852,
+        _ => return None,
+    };
+    // A limit outside that range is a mistake in the map, or put there to draw routes onto the road.
+    (5.0..=200.0).contains(&speed).then_some(speed)
 }

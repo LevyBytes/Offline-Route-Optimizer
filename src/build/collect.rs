@@ -1,11 +1,12 @@
-//! The two reads of a PBF file: first its ways and relations (the drivable roads, their names, the turn
-//! restrictions, and which blocks hold nodes), then only the node blocks, for the positions of the roads' points.
+//! The two reads of a PBF file: its ways and relations (the drivable roads, their names, the turn restrictions and
+//! which blocks hold nodes), then the node blocks for the roads' points. The file opens with its one header block, and
+//! the roads hold at most 2^28 points in all (MOST_POINTS), so the graph's counts fit their 32-bit indexes.
 
 use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
 
-use super::points::positions;
+use super::points::located;
 use super::{Progress, Step};
 use crate::osm::{Element, Point, tag};
 use crate::pbf::{BlobKind, Blobs, Block, Header, Kinds, decode_header};
@@ -29,23 +30,25 @@ pub struct Collected {
     pub positions: Vec<Option<Point>>,
 }
 
+const MOST_POINTS: usize = 1 << 28;
+
 pub fn collect(path: &Path, progress: &mut Progress<'_>) -> Result<Collected> {
-    let size = std::fs::metadata(path)?.len().max(1);
-    let mut blobs = Blobs::new(BufReader::with_capacity(1 << 20, File::open(path)?));
+    let file = File::open(path)?;
+    let size = file.metadata()?.len().max(1);
+    let mut blobs = Blobs::new(BufReader::with_capacity(1 << 20, file));
     let (mut header, mut ways, mut restrictions, mut node_blobs) =
         (None, Vec::new(), Vec::new(), Vec::new());
-    let (mut elements, want) = (
-        Vec::new(),
-        Kinds {
-            nodes: false,
-            ways: true,
-            relations: true,
-        },
-    );
+    let (mut elements, mut points) = (Vec::new(), 0);
     while let Some(blob) = blobs.next_blob()? {
         progress(Step::Roads, blob.offset, size);
         match blob.kind {
+            BlobKind::Header if header.is_some() => {
+                return Err(Error::Format("a second header block"));
+            }
             BlobKind::Header => header = Some(decode_header(&blob.data)?),
+            BlobKind::Data if header.is_none() => {
+                return Err(Error::Format("data before the header block"));
+            }
             BlobKind::Data => {
                 let block = Block::parse(&blob.data)?;
                 let kinds = block.kinds()?;
@@ -56,13 +59,17 @@ pub fn collect(path: &Path, progress: &mut Progress<'_>) -> Result<Collected> {
                     continue;
                 }
                 elements.clear();
-                block.elements(want, &mut elements)?;
+                block.elements(Kinds::LINES, &mut elements)?;
                 for element in elements.drain(..) {
                     match element {
                         Element::Way(way) => {
                             let Some(road) = road(&way.tags) else {
                                 continue;
                             };
+                            points += way.refs.len();
+                            if points > MOST_POINTS {
+                                return Err(Error::Limit("roads of more than 2^28 points"));
+                            }
                             let name = tag(&way.tags, "name").map(str::to_owned);
                             ways.push(RoadWay {
                                 id: way.id,
@@ -80,13 +87,7 @@ pub fn collect(path: &Path, progress: &mut Progress<'_>) -> Result<Collected> {
         }
     }
     let header = header.ok_or(Error::Format("file without a header block"))?;
-    let mut ids: Vec<i64> = ways
-        .iter()
-        .flat_map(|way| way.refs.iter().copied())
-        .collect();
-    ids.sort_unstable();
-    ids.dedup();
-    let positions = positions(&mut blobs, &node_blobs, &ids, progress)?;
+    let (ids, positions) = located(&mut blobs, &node_blobs, &ways, progress)?;
     ways.sort_by_key(|way| way.id);
     Ok(Collected {
         header,

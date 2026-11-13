@@ -1,14 +1,21 @@
 //! Joining the roads into a network: a point that ends a road or is shared by two is a junction, the stretch of a
 //! road between junctions is a chain, and each direction a car may drive a chain is an edge whose time is its length
-//! at the road's speed. A point missing from the file splits its road there.
+//! at the road's speed. A point missing from the file splits its road there, and so does a piece longer than 50 km
+//! or across the 180th meridian (none in Nevada is longer than 13 km): such a piece is a mistake in the map.
 
 use std::collections::HashMap;
 
 use super::chain::chain;
 use super::collect::Collected;
 use super::{Progress, Step};
+use crate::geo;
 use crate::graph::{Edge, Graph, NONE};
 use crate::osm::Point;
+
+/// Whether a piece of road is too long to be real.
+fn long(a: Point, b: Point) -> bool {
+    geo::meters(a, b) > 50_000.0 || (i64::from(a.lon) - i64::from(b.lon)).abs() > 1_800_000_000
+}
 
 pub struct Joined {
     pub graph: Graph,
@@ -48,6 +55,10 @@ pub fn join(c: &Collected, progress: &mut Progress<'_>) -> Joined {
             };
             if shape.last().is_some_and(|(j, _)| *j == i) {
                 continue;
+            }
+            if shape.last().is_some_and(|(_, last)| long(*last, at)) {
+                chain(&mut joined, &mut names, &mut edges, way, &shape);
+                shape.clear();
             }
             shape.push((i, at));
             if shape.len() > 1 && uses[i] >= 2 {

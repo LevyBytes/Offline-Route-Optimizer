@@ -1,5 +1,5 @@
 //! OpenStreetMap's PBF format, read and written by this library itself
-//! (https://wiki.openstreetmap.org/wiki/PBF_Format): only zlib-compressed and raw blocks, which is what Geofabrik
+//! (<https://wiki.openstreetmap.org/wiki/PBF_Format>): only zlib-compressed and raw blocks, which is what Geofabrik
 //! and the planet files use.
 
 mod blob;
@@ -14,6 +14,7 @@ mod numbers;
 mod out;
 mod scan;
 mod strings;
+mod table;
 mod wire;
 mod write;
 

@@ -1,6 +1,6 @@
 //! Just enough XML for osmChange files: start and end tags with their attributes, in order; declarations, comments,
 //! doctypes and text between tags are passed over. Attribute values keep XML's five named entities and numeric
-//! character references (https://www.w3.org/TR/xml/, sections 2.4 and 4.1).
+//! character references (<https://www.w3.org/TR/xml/>, sections 2.4 and 4.1).
 
 use super::escape::unescape;
 use crate::{Error, Result};
@@ -55,10 +55,8 @@ impl<'a> Xml<'a> {
     fn open(&mut self) -> Result<Event<'a>> {
         let text = self.text;
         let mut at = self.at + 1;
-        let name_end = text[at..]
-            .find(|c: char| c.is_whitespace() || c == '/' || c == '>')
-            .ok_or(BAD)?
-            + at;
+        let end = |text: &str| text.find(|c: char| c.is_whitespace() || "=/>".contains(c));
+        let name_end = end(&text[at..]).filter(|end| *end > 0).ok_or(BAD)? + at;
         let (name, mut attributes) = (&text[at..name_end], Vec::new());
         at = name_end;
         loop {
@@ -69,17 +67,18 @@ impl<'a> Xml<'a> {
                 self.at = at + if closed { 2 } else { 1 };
                 return Ok(Event::Open(name, attributes, closed));
             }
-            let equals = rest.find('=').ok_or(BAD)?;
-            let key = rest[..equals].trim();
-            let after = rest[equals + 1..].trim_start();
-            let quote = after
-                .chars()
-                .next()
-                .filter(|c| *c == '"' || *c == '\'')
-                .ok_or(BAD)?;
+            // A name, "=" with spaces allowed around it, then the value in quotes, which holds no "<".
+            let key_end = end(rest).filter(|end| *end > 0).ok_or(BAD)?;
+            let after = rest[key_end..].trim_start().strip_prefix('=');
+            let after = after.ok_or(BAD)?.trim_start();
+            let quote = after.chars().next().filter(|c| *c == '"' || *c == '\'');
             let value_start = at + (rest.len() - after.len()) + 1;
-            let value_end = text[value_start..].find(quote).ok_or(BAD)? + value_start;
-            attributes.push((key, unescape(&text[value_start..value_end])?));
+            let value_end = text[value_start..].find(quote.ok_or(BAD)?).ok_or(BAD)? + value_start;
+            let value = &text[value_start..value_end];
+            if value.contains('<') {
+                return Err(BAD);
+            }
+            attributes.push((&rest[..key_end], unescape(value)?));
             at = value_end + 1;
         }
     }
