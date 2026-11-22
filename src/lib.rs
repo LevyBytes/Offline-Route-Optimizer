@@ -13,6 +13,7 @@ pub mod pbf;
 pub mod restrict;
 pub mod roads;
 pub mod route;
+pub mod sketch;
 pub mod snap;
 pub mod store;
 pub mod street;

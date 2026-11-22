@@ -29,20 +29,34 @@ impl Search<'_> {
         )
     }
 
-    /// An edge reached at this cost, kept if no cheaper way to it is known.
-    pub(super) fn reach(&mut self, edge: u32, key: f64, leg: Leg) {
+    /// An edge reached at this cost from the edge `from` (NONE: leaving the start), kept if no cheaper way to it is
+    /// known; a drive's search remembers where it came from.
+    pub(super) fn reach(&mut self, edge: u32, key: f64, leg: Leg, from: u32) {
         let best = &mut self.best[edge as usize];
         if key < *best {
             if best.is_infinite() {
                 self.touched.push(edge);
             }
             *best = key;
+            if let Some(pred) = self.pred.get_mut(edge as usize) {
+                *pred = from;
+            }
             self.heap.push(Entry {
                 key,
                 leg,
                 item: Item::Edge(edge),
             });
         }
+    }
+
+    /// A spot reached from the edge `arriving` (NONE: along the start's own stretch) along `edge`: for a table its
+    /// index, for a drive the way it came, kept to be traced back.
+    pub(super) fn found(&mut self, spot: usize, arriving: u32, edge: u32) -> Item {
+        if self.pred.is_empty() {
+            return Item::Spot(spot as u32);
+        }
+        self.vias.push((arriving, edge));
+        Item::Via(self.vias.len() as u32 - 1)
     }
 
     /// A turn's time, from the table.

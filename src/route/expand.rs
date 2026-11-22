@@ -1,7 +1,7 @@
 //! A search's steps: leaving the start spot each way its road allows, and going on from an edge's head onto each
 //! edge leaving there that the turn rules allow, paying for the turn, and reaching the spots on each stretch.
 
-use super::entry::{Entry, Item};
+use super::entry::Entry;
 use super::search::Search;
 use super::{Goal, Leg, U_TURN_SECONDS};
 use crate::geo;
@@ -20,7 +20,7 @@ impl Search<'_> {
         ] {
             if edge != NONE {
                 let (key, leg) = self.along(zero, edge, part);
-                self.reach(edge, key, leg);
+                self.reach(edge, key, leg, NONE);
             }
         }
         for k in self.on_chain(spot.chain) {
@@ -32,11 +32,8 @@ impl Search<'_> {
             ] {
                 if edge != NONE && ahead >= 0.0 {
                     let (key, leg) = self.along(zero, edge, ahead);
-                    self.heap.push(Entry {
-                        key,
-                        leg,
-                        item: Item::Spot(other as u32),
-                    });
+                    let item = self.found(other, NONE, edge);
+                    self.heap.push(Entry { key, leg, item });
                 }
             }
         }
@@ -73,7 +70,7 @@ impl Search<'_> {
                 },
             );
             let (full_key, full) = self.along(base, next as u32, 1.0);
-            self.reach(next as u32, full_key, full);
+            self.reach(next as u32, full_key, full, arriving);
             for k in self.on_chain(leaving.chain) {
                 let (_, spot) = self.on[k];
                 let share = spots[spot].share;
@@ -82,11 +79,8 @@ impl Search<'_> {
                     next as u32,
                     if leaving.forward { share } else { 1.0 - share },
                 );
-                self.heap.push(Entry {
-                    key,
-                    leg,
-                    item: Item::Spot(spot as u32),
-                });
+                let item = self.found(spot, arriving, next as u32);
+                self.heap.push(Entry { key, leg, item });
             }
         }
     }

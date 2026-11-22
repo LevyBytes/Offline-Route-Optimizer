@@ -3,18 +3,23 @@
 //! 2026-11-12): where more than two roads meet, up to 7.5 s, a right turn cheaper than a left (its sigmoid with
 //! turn_bias 1.075); a U-turn only where the road ends or every other way is forbidden, 20 s more. A spot's own
 //! stretch of road is driven in part. One search from each spot reaches all the others and stops there; a spot not
-//! reached within 6 hours (or 600 km) has no leg.
+//! reached within 6 hours (or 600 km) has no leg. A drive is the same search from one spot to one other, with the
+//! road it takes (drive.rs).
 
 mod costs;
+mod drive;
 mod entry;
 mod expand;
 mod search;
+mod trace;
+mod track;
 mod turns;
 
 use crate::graph::Graph;
 use crate::snap::Spot;
 use crate::{Error, Result};
 
+pub use drive::{Drive, drive, drives};
 pub use turns::{U_TURN_SECONDS, turn_seconds};
 
 /// What the search keeps least: the drive's time, or its length.
@@ -35,8 +40,8 @@ pub struct Leg {
 pub const LIMIT_SECONDS: f64 = 6.0 * 3600.0;
 pub const LIMIT_METERS: f64 = 600_000.0;
 
-/// How many searches run side by side, each with its own arrays (about 8 bytes an edge). A fixed number: asking the
-/// system for its core count reads cgroup files Android's SELinux policy denies an app.
+/// How many searches run side by side, each with its own arrays (about 8 bytes an edge, 12 for a drive's). A fixed
+/// number: asking the system for its core count reads cgroup files Android's SELinux policy denies an app.
 pub const THREADS: usize = 4;
 
 /// The most spots one table takes: a search from each and a leg for each pair, so 1,000 spots take 24 MB of legs.

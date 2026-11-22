@@ -19,6 +19,10 @@ pub struct Search<'a> {
     pub(super) on: Vec<(u32, usize)>,
     /// Each whole-degree turn's time, from -180 to 180 (bearings are kept in whole degrees).
     pub(super) turns: Vec<f64>,
+    /// A drive's search only (track.rs; empty for a table's): the edge each edge was reached from (NONE: leaving the
+    /// start), and each spot entry's way: the edge it arrived on (NONE: along the start's own stretch), the edge after.
+    pub(super) pred: Vec<u32>,
+    pub(super) vias: Vec<(u32, u32)>,
 }
 
 impl<'a> Search<'a> {
@@ -35,6 +39,8 @@ impl<'a> Search<'a> {
             heap: BinaryHeap::new(),
             on: Vec::new(),
             turns,
+            pred: Vec::new(),
+            vias: Vec::new(),
         }
     }
 
@@ -74,7 +80,7 @@ impl<'a> Search<'a> {
         legs
     }
 
-    fn limit(&self) -> f64 {
+    pub(super) fn limit(&self) -> f64 {
         if self.goal == Goal::Time {
             LIMIT_SECONDS
         } else {

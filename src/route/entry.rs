@@ -1,4 +1,5 @@
-//! The search's heap entries: an edge reached at its head, or a spot reached, each with its cost and leg so far.
+//! The search's heap entries: an edge reached at its head, or a spot reached (by a table's search, or by a drive's,
+//! which keeps the way it came), each with its cost and leg so far.
 
 use std::cmp::Ordering;
 
@@ -8,6 +9,8 @@ use super::Leg;
 pub enum Item {
     Edge(u32),
     Spot(u32),
+    /// A drive's spot reached: an index into the search's `vias`, the way it came.
+    Via(u32),
 }
 
 #[derive(Clone, Copy)]
@@ -32,11 +35,15 @@ impl PartialOrd for Entry {
 }
 
 impl Ord for Entry {
-    /// Reversed, so the heap gives the least cost first (then the lower item, so a search is always the same).
+    /// Reversed, so the heap gives the least cost first; at an equal cost the shorter time, then the shorter length,
+    /// then the lower item. So a search is always the same, a spot's leg never depends on what else the search looks
+    /// for, and a drive's leg is the one its table finds.
     fn cmp(&self, other: &Self) -> Ordering {
         other
             .key
             .total_cmp(&self.key)
+            .then_with(|| other.leg.seconds.total_cmp(&self.leg.seconds))
+            .then_with(|| other.leg.meters.total_cmp(&self.leg.meters))
             .then_with(|| other.item.cmp(&self.item))
     }
 }

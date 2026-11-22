@@ -1,5 +1,5 @@
 //! Lengths and directions on the earth: the haversine formula for lengths (the mean radius, 6,371,008.8 m) and,
-//! over the few hundred metres snapping looks at, a flat projection around the place.
+//! over the few hundred metres snapping looks at, a flat projection around the place; and a line with fewer points.
 
 use crate::osm::Point;
 
@@ -58,4 +58,35 @@ pub fn between(a: Point, b: Point, t: f64) -> Point {
         lat: mix(a.lat, b.lat),
         lon: mix(a.lon, b.lon),
     }
+}
+
+/// The points of a line with fewer of them, Douglas and Peucker's way (1973): the first and last kept, then, between
+/// two kept points, the one farthest from the segment between them (as `project` measures it), while it is more than
+/// `tolerance` metres from it (a point on that segment never kept). Iterative, so a long line takes no deep recursion.
+pub fn simplify(points: &[Point], tolerance: f64) -> Vec<Point> {
+    if points.len() < 3 {
+        return points.to_vec();
+    }
+    let last = points.len() - 1;
+    let mut keep = vec![false; points.len()];
+    (keep[0], keep[last]) = (true, true);
+    let mut spans = vec![(0, last)];
+    while let Some((a, b)) = spans.pop() {
+        let far = (a + 1..b)
+            .map(|k| (project(points[k], points[a], points[b]).1, k))
+            .fold(
+                (0.0, a),
+                |best, next| if next.0 > best.0 { next } else { best },
+            );
+        if far.1 > a && far.0 > tolerance {
+            keep[far.1] = true;
+            spans.push((a, far.1));
+            spans.push((far.1, b));
+        }
+    }
+    points
+        .iter()
+        .zip(keep)
+        .filter_map(|(point, kept)| kept.then_some(*point))
+        .collect()
 }
